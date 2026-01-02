@@ -513,7 +513,12 @@
 
                 <label class="document-toggle">
                     <input type="checkbox" id="includeDocuments" checked>
-                    <span>Include documents in chat</span>
+                    <span>Include documents</span>
+                </label>
+
+                <label class="document-toggle">
+                    <input type="checkbox" id="useWebSearch">
+                    <span>Web Search</span>
                 </label>
             </div>
             <div class="input-wrapper">
@@ -663,61 +668,73 @@
         });
 
         // Send message function
-        const selectedProvider = providerSelect.value;
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
 
-        // Display user message (with document indicator if applicable)
-        let displayMessage = message;
-        if (hasDocuments && includeDocuments) {
-            displayMessage = message + '\n\n📎 [Documents attached]';
-        }
+            // Check if we have documents to include and if user wants them included
+            const hasDocuments = documentsList.children.length > 0;
+            const includeDocuments = includeDocumentsCheckbox.checked;
+            const useWebSearch = useWebSearchCheckbox ? useWebSearchCheckbox.checked : false;
+            const selectedProvider = providerSelect.value;
 
-        addMessage(displayMessage, 'user-message', false);
-        userInput.value = '';
-        userInput.style.height = 'auto';
-        sendBtn.disabled = true;
+            // Display user message (with document indicator if applicable)
+            let displayMessage = message;
+            let indicators = [];
+            if (hasDocuments && includeDocuments) indicators.push('Documents');
+            if (useWebSearch) indicators.push('Web Search');
 
-        // Show typing indicator
-        const typingDiv = document.createElement('div');
-        typingDiv.className = 'typing-indicator';
-        typingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div><span style="color: rgba(255,255,255,0.5); font-size: 13px;">Thinking...</span>';
-        chatMessages.appendChild(typingDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-
-        try {
-            // Call FastAPI backend
-            const response = await fetch('http://localhost:8000/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: message,
-                    session_id: currentSessionId,
-                    include_documents: hasDocuments && includeDocuments,
-                    provider: selectedProvider
-                const response = await fetch('http://localhost:8000/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: message,
-                            session_id: currentSessionId,
-                            include_documents: hasDocuments && includeDocuments
-                        })
-                    });
-
-                    const data = await response.json();
-
-                    // Update session ID if provided
-                    if(data.session_id && data.session_id !== currentSessionId) {
-                currentSessionId = data.session_id;
-                localStorage.setItem('chatbot_session_id', currentSessionId);
-                sessionIdSpan.textContent = currentSessionId.substring(0, 8) + '...';
-                sessionInfo.style.display = 'flex';
+            if (indicators.length > 0) {
+                displayMessage = message + `\n\n📎 [${indicators.join(' + ')} attached]`;
             }
+
+            addMessage(displayMessage, 'user-message', false);
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            sendBtn.disabled = true;
+
+            // Show typing indicator
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'typing-indicator';
+            typingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div><span style="color: rgba(255,255,255,0.5); font-size: 13px;">Thinking...</span>';
+            chatMessages.appendChild(typingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            try {
+                // Call FastAPI backend
+                const response = await fetch('http://localhost:8000/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: currentSessionId,
+                        include_documents: hasDocuments && includeDocuments,
+                        use_web_search: useWebSearch,
+                        provider: selectedProvider
+                    })
+                });
+
+                const data = await response.json();
+
+                // Update session ID if provided
+                if (data.session_id && data.session_id !== currentSessionId) {
+                    currentSessionId = data.session_id;
+                    localStorage.setItem('chatbot_session_id', currentSessionId);
+                    sessionIdSpan.textContent = currentSessionId.substring(0, 8) + '...';
+                    sessionInfo.style.display = 'flex';
+                }
 
                 // Remove typing indicator
                 typingDiv.remove();
 
-            // Display bot response with markdown rendering
-            addMessage(data.reply, 'bot-message', true);
+                // Display bot response with markdown rendering
+                addMessage(data.reply, 'bot-message', true);
+            } catch (error) {
+                typingDiv.remove();
+                addMessage('❌ Error: Could not connect to server', 'bot-message', false);
+            }
+
+            sendBtn.disabled = false;
         } catch (error) {
             typingDiv.remove();
             addMessage('❌ Error: Could not connect to server', 'bot-message', false);

@@ -23,6 +23,7 @@ from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 from langchain_anthropic import ChatAnthropic
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -156,6 +157,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     include_documents: bool = True
+    use_web_search: bool = False
     provider: str = "gemini"
     model: Optional[str] = None
 
@@ -281,6 +283,16 @@ def create_context_from_documents(user_message: str) -> str:
         return "\n\n" + "="*50 + "\n".join(relevant_docs) + "\n" + "="*50
     return ""
 
+
+def perform_web_search(query: str) -> str:
+    """Perform a web search and return results"""
+    try:
+        search = DuckDuckGoSearchRun()
+        results = search.run(query)
+        return f"\n\nWeb Search Results for '{query}':\n{results}\n"
+    except Exception as e:
+        return f"\n\nWeb Search Error: {str(e)}\n"
+
 # Chat endpoint
 
 
@@ -302,12 +314,22 @@ async def chat(request: ChatRequest):
 
         # Build the user message with document context if requested
         user_message = request.message
+        context_parts = []
 
         if request.include_documents and stored_documents:
             # Create document context
             document_context = create_context_from_documents(request.message)
             if document_context:
-                user_message = f"{request.message}\n\n{document_context}\n\nPlease answer based on the provided documents if relevant."
+                context_parts.append(document_context)
+
+        if request.use_web_search:
+            # Perform web search
+            search_results = perform_web_search(request.message)
+            context_parts.append(search_results)
+
+        if context_parts:
+            combined_context = "\n".join(context_parts)
+            user_message = f"{request.message}\n\n{combined_context}\n\nPlease answer based on the provided documents and web search results if relevant."
 
         # Initialize LLM and Chain dynamically
         llm = get_llm(request.provider, request.model)
