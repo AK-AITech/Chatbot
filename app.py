@@ -22,8 +22,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 from langchain_anthropic import ChatAnthropic
-from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint, HuggingFaceEmbeddings
 from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_chroma import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.graph import StateGraph, END
+from typing import TypedDict, Annotated, Sequence
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -146,6 +151,15 @@ def init_db():
 # Initialize database on startup
 init_db()
 
+# Initialize Advanced RAG components
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+vector_store = Chroma(
+    collection_name="chatbot_docs",
+    embedding_function=embeddings,
+    persist_directory="./chroma_db"
+)
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+
 # Global variables for conversation management
 session_histories = {}  # Store chat histories per session
 stored_documents = []
@@ -243,6 +257,13 @@ async def process_document(file: UploadFile) -> str:
             'file_type': file.content_type
         })
 
+        # Advanced RAG: Chunk and add to Vector Store
+        chunks = text_splitter.split_text(content)
+        vector_store.add_texts(
+            texts=chunks,
+            metadatas=[{"filename": file.filename, "doc_id": doc_id} for _ in chunks]
+        )
+
         # Save to database
         conn = sqlite3.connect('chatbot_memory.db')
         cursor = conn.cursor()
@@ -262,36 +283,86 @@ async def process_document(file: UploadFile) -> str:
     return content
 
 
-def create_context_from_documents(user_message: str) -> str:
-    """Create context from stored documents relevant to user message"""
-    if not stored_documents:
-        return ""
+# LangGraph State Definition
+class AgentState(TypedDict):
+    input: str
+    chat_history: List[BaseMessage]
+    context: str
+    use_web_search: bool
+    include_documents: bool
+    provider: str
+    model: Optional[str]
+    response: str
 
-    # Always include all documents for now, but limit content length
-    relevant_docs = []
+# Node Functions
+def retrieve_node(state: AgentState):
+    """Retrieve relevant documents from ChromaDB"""
+    if not state["include_documents"]:
+        return {"context": state.get("context", "")}
+    
+    query = state["input"]
+    # Search for top 3 relevant chunks
+    docs = vector_store.similarity_search(query, k=3)
+    
+    context = state.get("context", "")
+    if docs:
+        doc_context = "\n\nRelevant Document Chunks:\n" + "\n".join([f"[{d.metadata['filename']}]: {d.page_content}" for d in docs])
+        context += doc_context
+        
+    return {"context": context}
 
-    for doc in stored_documents:
-        # Include first 2000 characters of each document
-        content_preview = doc['content'][:2000]
-        if len(doc['content']) > 2000:
-            content_preview += "..."
-
-        relevant_docs.append(
-            f"Document: {doc['filename']}\nContent:\n{content_preview}")
-
-    if relevant_docs:
-        return "\n\n" + "="*50 + "\n".join(relevant_docs) + "\n" + "="*50
-    return ""
-
-
-def perform_web_search(query: str) -> str:
-    """Perform a web search and return results"""
+def web_search_node(state: AgentState):
+    """Perform web search if enabled"""
+    if not state["use_web_search"]:
+        return {"context": state.get("context", "")}
+    
+    query = state["input"]
     try:
         search = DuckDuckGoSearchRun()
         results = search.run(query)
-        return f"\n\nWeb Search Results for '{query}':\n{results}\n"
+        web_context = f"\n\nWeb Search Results:\n{results}"
+        return {"context": state.get("context", "") + web_context}
     except Exception as e:
-        return f"\n\nWeb Search Error: {str(e)}\n"
+        return {"context": state.get("context", "") + f"\n\nWeb Search Error: {str(e)}"}
+
+def generate_node(state: AgentState):
+    """Generate response using the selected LLM"""
+    llm = get_llm(state["provider"], state["model"])
+    
+    # Prepare the prompt with context
+    system_msg = """You are a precise and helpful AI assistant.
+Use the provided context (documents and web search) to answer the user's question.
+If the context doesn't contain the answer, use your general knowledge but mention that it's not in the provided documents.
+Stay professional and concise."""
+    
+    full_input = f"Context:\n{state['context']}\n\nQuestion: {state['input']}"
+    
+    messages = [("system", system_msg)]
+    # Add history
+    for msg in state["chat_history"]:
+        if isinstance(msg, HumanMessage):
+            messages.append(("human", msg.content))
+        elif isinstance(msg, AIMessage):
+            messages.append(("ai", msg.content))
+            
+    messages.append(("human", full_input))
+    
+    response = llm.invoke(messages)
+    return {"response": response.content}
+
+# Build the Graph
+workflow = StateGraph(AgentState)
+
+workflow.add_node("retrieve", retrieve_node)
+workflow.add_node("web_search", web_search_node)
+workflow.add_node("generate", generate_node)
+
+workflow.set_entry_point("retrieve")
+workflow.add_edge("retrieve", "web_search")
+workflow.add_edge("web_search", "generate")
+workflow.add_edge("generate", END)
+
+app_graph = workflow.compile()
 
 # Chat endpoint
 
@@ -299,7 +370,7 @@ def perform_web_search(query: str) -> str:
 @app.post("/chat")
 async def chat(request: ChatRequest):
     """
-    Receives user message, processes through Gemini via LangChain with document context,
+    Receives user message, processes through LangGraph with Advanced RAG,
     and returns AI response with conversation memory
     """
     try:
@@ -307,51 +378,30 @@ async def chat(request: ChatRequest):
         session_id = request.session_id or str(uuid.uuid4())
 
         # Get or create chat history for this session
-        history = get_or_create_history(session_id)
+        history_obj = get_or_create_history(session_id)
+        chat_history = history_obj.messages
 
         # Save user message to database
         save_to_db(session_id, "human", request.message)
 
-        # Build the user message with document context if requested
-        user_message = request.message
-        context_parts = []
+        # Run the LangGraph workflow
+        initial_state = {
+            "input": request.message,
+            "chat_history": chat_history,
+            "context": "",
+            "use_web_search": request.use_web_search,
+            "include_documents": request.include_documents,
+            "provider": request.provider,
+            "model": request.model,
+            "response": ""
+        }
 
-        if request.include_documents and stored_documents:
-            # Create document context
-            document_context = create_context_from_documents(request.message)
-            if document_context:
-                context_parts.append(document_context)
+        result = app_graph.invoke(initial_state)
+        response_text = result["response"]
 
-        if request.use_web_search:
-            # Perform web search
-            search_results = perform_web_search(request.message)
-            context_parts.append(search_results)
-
-        if context_parts:
-            combined_context = "\n".join(context_parts)
-            user_message = f"{request.message}\n\n{combined_context}\n\nPlease answer based on the provided documents and web search results if relevant."
-
-        # Initialize LLM and Chain dynamically
-        llm = get_llm(request.provider, request.model)
-        chain = prompt | llm
-
-        # Create chain with message history
-        chain_with_history = RunnableWithMessageHistory(
-            chain,
-            lambda session_id: get_or_create_history(session_id),
-            input_messages_key="input",
-            history_messages_key="history"
-        )
-
-        # Get response from LangChain
-        response = chain_with_history.invoke(
-            {"input": user_message},
-            config={"configurable": {"session_id": session_id}}
-        )
-
-        # Extract text content from response
-        response_text = response.content if hasattr(
-            response, 'content') else str(response)
+        # Update LangChain memory
+        history_obj.add_user_message(request.message)
+        history_obj.add_ai_message(response_text)
 
         # Save AI response to database
         save_to_db(session_id, "ai", response_text)

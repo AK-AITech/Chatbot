@@ -1,15 +1,15 @@
-# 🤖 Multi-Provider RAG Chatbot
+# 🤖 Multi-Provider Advanced RAG Chatbot (LangGraph)
 
-A powerful, educational chatbot that demonstrates Retrieval-Augmented Generation (RAG) using LangChain, FastAPI, and multiple LLM providers (Gemini, OpenAI, Anthropic, Ollama, and Hugging Face).
+A sophisticated, educational chatbot that demonstrates **Advanced Retrieval-Augmented Generation (RAG)** and **Agentic Workflows** using LangGraph, ChromaDB, FastAPI, and multiple LLM providers.
 
 ## 🌟 Features
 
+*   **Advanced RAG**: Uses **ChromaDB** vector store and **HuggingFace Embeddings** for semantic search.
+*   **Agentic Workflow (LangGraph)**: Orchestrates retrieval, web search, and generation using a state machine.
 *   **Multi-Provider Support**: Switch between Google Gemini, OpenAI, Anthropic, Ollama (Local), and Hugging Face instantly.
-*   **RAG (Retrieval-Augmented Generation)**: Upload PDF, TXT, or MD files and chat with them.
-*   **Web Search**: Toggle real-time web search (via DuckDuckGo) to get the latest information.
-*   **Memory**: Remembers your conversation context.
+*   **Web Search**: Integrated real-time web search via DuckDuckGo.
+*   **Memory**: Persistent conversation history stored in SQLite.
 *   **Modern UI**: Clean, dark-themed interface with markdown support.
-*   **FastAPI Backend**: High-performance async Python server.
 
 ## 🚀 Quick Start
 
@@ -25,7 +25,7 @@ A powerful, educational chatbot that demonstrates Retrieval-Augmented Generation
     OPENAI_API_KEY=your_openai_api_key
     ANTHROPIC_API_KEY=your_anthropic_api_key
     HUGGINGFACEHUB_API_TOKEN=your_huggingface_token
-    OLLAMA_BASE_URL=http://localhost:11434  # Default for local Ollama
+    OLLAMA_BASE_URL=http://localhost:11434
     ```
 
 3.  **Run the Application**
@@ -36,51 +36,39 @@ A powerful, educational chatbot that demonstrates Retrieval-Augmented Generation
 4.  **Open in Browser**
     Go to `http://localhost:8000`
 
-## 📚 How to Learn RAG with this Project
+## 📚 How to Learn Advanced RAG & LangGraph
 
-This project is designed to be a learning tool for building RAG applications. Here is how you can use it to understand the core concepts:
+This project is a blueprint for modern AI applications. Here is how to study it:
 
-### 1. The RAG Pipeline
-RAG consists of three main steps: **Retrieval**, **Augmentation**, and **Generation**.
+### 1. Advanced RAG Pipeline
+Unlike basic RAG, Advanced RAG uses semantic search to find relevant information.
 
-*   **Ingestion (Upload)**: Look at `process_document` in `app.py`.
-    *   We read the file (PDF/Text).
-    *   We extract the text content.
-    *   *Learning Task*: Try adding support for `.docx` files using `python-docx`.
+*   **Ingestion & Chunking**: Look at `process_document` in `app.py`.
+    *   We use `RecursiveCharacterTextSplitter` to break documents into 1000-character chunks.
+    *   We use `HuggingFaceEmbeddings` to turn text into vectors.
+    *   We store these in **ChromaDB**.
+*   **Semantic Retrieval**: Look at `retrieve_node` in `app.py`.
+    *   Instead of reading the whole file, we use `vector_store.similarity_search` to find the top 3 most relevant chunks for the user's specific question.
 
-*   **Storage**: Look at `stored_documents` and `init_db` in `app.py`.
-    *   We store the raw text in memory and SQLite.
-    *   *Learning Task*: In a production app, you would chunk this text and store "embeddings" (vector representations) in a Vector Database (like ChromaDB or Pinecone) for semantic search. Try implementing a simple vector search!
+### 2. Agentic Workflows with LangGraph
+The application logic is no longer a simple linear script; it's a **Graph**.
 
-*   **Retrieval (Context Creation)**: Look at `create_context_from_documents` in `app.py`.
-    *   Currently, we do a "naive" retrieval: we just grab the first 2000 characters of *all* documents.
-    *   *Learning Task*: This is where the magic happens. Replace this function with a logic that only selects the *relevant* parts of the documents based on the user's question.
+*   **State Management**: Look at `AgentState` in `app.py`. It tracks the input, context, and history throughout the process.
+*   **Nodes**: Each step (Retrieve, Web Search, Generate) is a separate node in the graph.
+*   **Edges**: Look at the `workflow` construction. It defines the order of operations:
+    1.  `retrieve` -> `web_search` -> `generate`
+*   *Learning Task*: Try adding a "conditional edge" that only performs a web search if the retrieved documents don't contain the answer!
 
-*   **Generation (Chat)**: Look at the `chat` endpoint in `app.py`.
-    *   We combine the `user_message` + `document_context` + `web_search_results` into a single prompt.
-    *   We send this to the LLM (Gemini, OpenAI, Anthropic, etc.).
-    *   The LLM uses the context to answer the question.
-
-### 2. Web Search Integration
-Check the `perform_web_search` function in `app.py`.
-*   It uses the `DuckDuckGoSearchRun` tool from `langchain-community`.
-*   This demonstrates how to augment the LLM's knowledge with real-time data from the internet.
-
-### 3. Multi-Provider Logic
-Check the `get_llm` function in `app.py`.
-*   It demonstrates how LangChain abstracts different providers (`ChatGoogleGenerativeAI`, `ChatOpenAI`, `ChatAnthropic`, `ChatOllama`, `ChatHuggingFace`) into a common interface.
-*   You can easily swap models without changing your core application logic.
-
-### 3. Frontend Integration
-Check `index.html`.
-*   See how the frontend sends the `provider` and `include_documents` flags to the backend.
-*   It handles the chat history and displays the response.
+### 3. Multi-Provider Abstraction
+Check the `get_llm` function. It shows how LangChain allows you to swap the "brain" of your agent (Gemini, GPT-4o, Claude) without changing the graph logic.
 
 ## 🛠️ Tech Stack
 
-*   **Backend**: Python, FastAPI, SQLite
-*   **AI/LLM**: LangChain, Google Gemini, OpenAI, Anthropic, Ollama, Hugging Face
-*   **Frontend**: HTML, CSS, JavaScript (Vanilla)
+*   **Orchestration**: LangGraph, LangChain
+*   **Vector Store**: ChromaDB
+*   **Embeddings**: HuggingFace (all-MiniLM-L6-v2)
+*   **Backend**: FastAPI, SQLite
+*   **Frontend**: Vanilla JS, CSS, HTML
 
 ## 📝 License
 
