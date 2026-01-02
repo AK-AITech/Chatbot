@@ -558,6 +558,7 @@
         const documentsList = document.getElementById('documentsList');
         const documentStatus = document.getElementById('documentStatus');
         const includeDocumentsCheckbox = document.getElementById('includeDocuments');
+        const useWebSearchCheckbox = document.getElementById('useWebSearch');
 
         // Session management
         let currentSessionId = localStorage.getItem('chatbot_session_id') || null;
@@ -735,13 +736,7 @@
             }
 
             sendBtn.disabled = false;
-        } catch (error) {
-            typingDiv.remove();
-            addMessage('❌ Error: Could not connect to server', 'bot-message', false);
-        }
-
-        sendBtn.disabled = false;
-        userInput.focus();
+            userInput.focus();
         }
 
         // Add message to chat

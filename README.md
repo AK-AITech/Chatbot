@@ -6,6 +6,7 @@ A powerful, educational chatbot that demonstrates Retrieval-Augmented Generation
 
 *   **Multi-Provider Support**: Switch between Google Gemini, OpenAI, Anthropic, Ollama (Local), and Hugging Face instantly.
 *   **RAG (Retrieval-Augmented Generation)**: Upload PDF, TXT, or MD files and chat with them.
+*   **Web Search**: Toggle real-time web search (via DuckDuckGo) to get the latest information.
 *   **Memory**: Remembers your conversation context.
 *   **Modern UI**: Clean, dark-themed interface with markdown support.
 *   **FastAPI Backend**: High-performance async Python server.
@@ -56,11 +57,16 @@ RAG consists of three main steps: **Retrieval**, **Augmentation**, and **Generat
     *   *Learning Task*: This is where the magic happens. Replace this function with a logic that only selects the *relevant* parts of the documents based on the user's question.
 
 *   **Generation (Chat)**: Look at the `chat` endpoint in `app.py`.
-    *   We combine the `user_message` + `document_context` into a single prompt.
+    *   We combine the `user_message` + `document_context` + `web_search_results` into a single prompt.
     *   We send this to the LLM (Gemini, OpenAI, Anthropic, etc.).
     *   The LLM uses the context to answer the question.
 
-### 2. Multi-Provider Logic
+### 2. Web Search Integration
+Check the `perform_web_search` function in `app.py`.
+*   It uses the `DuckDuckGoSearchRun` tool from `langchain-community`.
+*   This demonstrates how to augment the LLM's knowledge with real-time data from the internet.
+
+### 3. Multi-Provider Logic
 Check the `get_llm` function in `app.py`.
 *   It demonstrates how LangChain abstracts different providers (`ChatGoogleGenerativeAI`, `ChatOpenAI`, `ChatAnthropic`, `ChatOllama`, `ChatHuggingFace`) into a common interface.
 *   You can easily swap models without changing your core application logic.
