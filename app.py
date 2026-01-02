@@ -20,6 +20,9 @@ import io
 # LangChain imports
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
+from langchain_anthropic import ChatAnthropic
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -68,6 +71,33 @@ def get_llm(provider: str, model: str = None):
             api_key=api_key,
             temperature=0.2
         )
+    elif provider == "anthropic":
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY not found in environment variables")
+        
+        return ChatAnthropic(
+            model=model or "claude-3-5-sonnet-20240620",
+            anthropic_api_key=api_key,
+            temperature=0.2
+        )
+    elif provider == "ollama":
+        return ChatOllama(
+            model=model or "llama3",
+            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            temperature=0.2
+        )
+    elif provider == "huggingface":
+        api_key = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="HUGGINGFACEHUB_API_TOKEN not found in environment variables")
+        
+        llm = HuggingFaceEndpoint(
+            repo_id=model or "mistralai/Mistral-7B-Instruct-v0.2",
+            huggingfacehub_api_token=api_key,
+            temperature=0.2
+        )
+        return ChatHuggingFace(llm=llm)
     else:
         # Default to Gemini
         return ChatGoogleGenerativeAI(

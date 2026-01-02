@@ -1,10 +1,10 @@
 # 🤖 Multi-Provider RAG Chatbot
 
-A powerful, educational chatbot that demonstrates Retrieval-Augmented Generation (RAG) using LangChain, FastAPI, and multiple LLM providers (Gemini & OpenAI).
+A powerful, educational chatbot that demonstrates Retrieval-Augmented Generation (RAG) using LangChain, FastAPI, and multiple LLM providers (Gemini, OpenAI, Anthropic, Ollama, and Hugging Face).
 
 ## 🌟 Features
 
-*   **Multi-Provider Support**: Switch between Google Gemini (Flash 2.0) and OpenAI (GPT-4o) instantly.
+*   **Multi-Provider Support**: Switch between Google Gemini, OpenAI, Anthropic, Ollama (Local), and Hugging Face instantly.
 *   **RAG (Retrieval-Augmented Generation)**: Upload PDF, TXT, or MD files and chat with them.
 *   **Memory**: Remembers your conversation context.
 *   **Modern UI**: Clean, dark-themed interface with markdown support.
@@ -21,7 +21,10 @@ A powerful, educational chatbot that demonstrates Retrieval-Augmented Generation
     Create a `.env` file in the root directory:
     ```env
     GOOGLE_API_KEY=your_gemini_api_key
-    OPENAI_API_KEY=your_openai_api_key  # Optional, if you want to use OpenAI
+    OPENAI_API_KEY=your_openai_api_key
+    ANTHROPIC_API_KEY=your_anthropic_api_key
+    HUGGINGFACEHUB_API_TOKEN=your_huggingface_token
+    OLLAMA_BASE_URL=http://localhost:11434  # Default for local Ollama
     ```
 
 3.  **Run the Application**
@@ -54,12 +57,12 @@ RAG consists of three main steps: **Retrieval**, **Augmentation**, and **Generat
 
 *   **Generation (Chat)**: Look at the `chat` endpoint in `app.py`.
     *   We combine the `user_message` + `document_context` into a single prompt.
-    *   We send this to the LLM (Gemini or OpenAI).
+    *   We send this to the LLM (Gemini, OpenAI, Anthropic, etc.).
     *   The LLM uses the context to answer the question.
 
 ### 2. Multi-Provider Logic
 Check the `get_llm` function in `app.py`.
-*   It demonstrates how LangChain abstracts different providers (`ChatGoogleGenerativeAI`, `ChatOpenAI`) into a common interface.
+*   It demonstrates how LangChain abstracts different providers (`ChatGoogleGenerativeAI`, `ChatOpenAI`, `ChatAnthropic`, `ChatOllama`, `ChatHuggingFace`) into a common interface.
 *   You can easily swap models without changing your core application logic.
 
 ### 3. Frontend Integration
@@ -70,7 +73,7 @@ Check `index.html`.
 ## 🛠️ Tech Stack
 
 *   **Backend**: Python, FastAPI, SQLite
-*   **AI/LLM**: LangChain, Google Gemini, OpenAI
+*   **AI/LLM**: LangChain, Google Gemini, OpenAI, Anthropic, Ollama, Hugging Face
 *   **Frontend**: HTML, CSS, JavaScript (Vanilla)
 
 ## 📝 License
