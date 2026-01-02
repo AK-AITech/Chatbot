@@ -19,6 +19,7 @@ import io
 
 # LangChain imports
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -38,14 +39,8 @@ app.add_middleware(
 )
 
 # Initialize LangChain LLM with Gemini
-llm = ChatGoogleGenerativeAI(
-    # Fast, efficient model (only one available for your API)
-    model="gemini-2.0-flash-exp",
-    google_api_key=os.getenv("GOOGLE_API_KEY"),
-    temperature=0.2,  # Very low temperature for controlled, focused responses
-    max_output_tokens=4096,  # Moderate token limit for faster responses
-    convert_system_message_to_human=True
-)
+# We will now initialize this dynamically per request
+# llm = ChatGoogleGenerativeAI(...)
 
 # Create a chat prompt template with optimized system instructions
 prompt = ChatPromptTemplate.from_messages([
@@ -61,8 +56,28 @@ Guidelines:
     ("human", "{input}")
 ])
 
-# Create the chain
-chain = prompt | llm
+# Helper to get LLM based on provider
+def get_llm(provider: str, model: str = None):
+    if provider == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="OPENAI_API_KEY not found in environment variables")
+        
+        return ChatOpenAI(
+            model=model or "gpt-4o",
+            api_key=api_key,
+            temperature=0.2
+        )
+    else:
+        # Default to Gemini
+        return ChatGoogleGenerativeAI(
+            model=model or "gemini-2.0-flash-exp",
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0.2,
+            max_output_tokens=4096,
+            convert_system_message_to_human=True
+        )
+
 
 # Initialize database
 
@@ -111,6 +126,8 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     include_documents: bool = True
+    provider: str = "gemini"
+    model: Optional[str] = None
 
 
 class DocumentUploadResponse(BaseModel):
@@ -261,6 +278,10 @@ async def chat(request: ChatRequest):
             document_context = create_context_from_documents(request.message)
             if document_context:
                 user_message = f"{request.message}\n\n{document_context}\n\nPlease answer based on the provided documents if relevant."
+
+        # Initialize LLM and Chain dynamically
+        llm = get_llm(request.provider, request.model)
+        chain = prompt | llm
 
         # Create chain with message history
         chain_with_history = RunnableWithMessageHistory(
